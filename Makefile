@@ -4,7 +4,7 @@ LIBS=-lwiringPi
 
 all : hd44780_gpio_daemon
 
-OBJECTS := hd44780_gpio_daemon.o hd44780.o
+OBJECTS := hd44780_gpio_daemon.o hd44780.o hd44780_font.o statuspages.o
 
 hd44780_gpio_daemon : $(OBJECTS)
 	$(CC) -o $@ $^ $(LIBS)

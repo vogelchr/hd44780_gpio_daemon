@@ -54,7 +54,9 @@ hd44780_write_byte(unsigned char v, enum HD44780_ISCMD iscmd);
 
 /* write a buffer of data */
 extern void
-hd44780_write_buf(unsigned char *v, size_t len);
+hd44780_write_buf(const char *v, size_t len);
 
+extern void
+hd44780_clear_mem();
 
 #endif
