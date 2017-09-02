@@ -23,6 +23,8 @@ int
 main(int argc, char **argv)
 {
 	useconds_t usec;
+	useconds_t usec_per_statuspage;
+	struct statuspage **p;
 	int i;
 
 	(void) argc;
@@ -32,13 +34,22 @@ main(int argc, char **argv)
 
 	hd44780_font_setchar(0, cgram);
 
+	p = statuspages;
+	usec_per_statuspage = 0;
 
 	while (1) {
-		(statuspages[0]->fct_enter)();
-		for (i=0; i<50; i++) {
-			(statuspages[0]->fct_update)(&usec);
-			usleep(usec);
+
+		if (usec_per_statuspage <= 0) {
+			printf("New statuspage.\n");
+			p++;
+			if (!*p)
+				p = statuspages;
+			usec_per_statuspage = 10000000;
+			(*p)->fct_enter();
 		}
+		(*p)->fct_update(&usec);
+		usleep(usec);
+		usec_per_statuspage -= usec;
 	}
 
 	return 0;

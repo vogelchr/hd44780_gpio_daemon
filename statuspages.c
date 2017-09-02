@@ -1,6 +1,7 @@
 #include "statuspages.h"
 #include "hd44780.h"
 #include "hd44780_font.h"
+#include <stdint.h>
 #include <time.h>
 #include <string.h>
 #include <stdio.h>
@@ -97,8 +98,7 @@ statuspage_clock_init(void)
 	return 0;
 }
 
-
-struct statuspage statuspage_clock = {
+static struct statuspage statuspage_clock = {
 	&statuspage_clock_init,
 	&statuspage_clock_update
 };
