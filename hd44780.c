@@ -1,8 +1,37 @@
+/*
+    This file is part of hd44780_gpio_daemon.
+
+    (c) 2019 by Christian Vogel <vogelchr@vogel.cx>
+
+    hd44780_gpio_daemon is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    hd44780_gpio_daemon is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with hd44780_gpio_daemon.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+
 #include "hd44780.h"
 #include <unistd.h>
-#include <wiringPi.h>
 #include <stdio.h>
 #include <string.h>
+
+/* allow compilation on x86 */
+#ifdef DISABLE_WIRINGPI
+#define pinMode(a,b)
+#define digitalWrite(a,b)
+#define wiringPiSetupGpio()
+#else
+#include <wiringPi.h>
+#endif
+
 
 #define HD44780_GPIO_RS 17
 #define HD44780_GPIO_nE 27
@@ -37,27 +66,50 @@ hd44780_init_gpio() {
 /* D4..D7 is connected, so we write the upper 4 bits! */
 static void
 hd44780_write_nibble(unsigned char v, useconds_t sleep_after) {
-//	fprintf(stderr,"Nibble %01x.\n", v>>4);
+	int k;
+
+	(void) v; /* warning when compiling with DISABLE_WIRINGPI */
+
+	digitalWrite(HD44780_GPIO_nE, 1);
 	digitalWrite(HD44780_GPIO_D7, !!(v & 0x80));
 	digitalWrite(HD44780_GPIO_D6, !!(v & 0x40));
 	digitalWrite(HD44780_GPIO_D5, !!(v & 0x20));
 	digitalWrite(HD44780_GPIO_D4, !!(v & 0x10));
-	digitalWrite(HD44780_GPIO_nE, 1);
-	usleep(1);
+	/* data setup time tDSW >= 80ns */
+	for (k=0; k<80; k++)
+		asm volatile ( "nop;" );
 	digitalWrite(HD44780_GPIO_nE, 0);
-	usleep(sleep_after);
+
+	if (sleep_after > 1) {
+		usleep(sleep_after);
+		return;
+	}
+
+	/* 1us between nibbles */
+	for (k=0; k<1000; k++)
+		asm volatile ( "nop;" );
 }
 
 /* set the register select line, avoid GPIO operation if cached value matches */
 static void
 hd44780_set_rs(enum HD44780_ISCMD rs) {
+	int k;
 	rs = !!rs; /* collapse to 0 or 1 */
-//	fprintf(stderr,"RS=%d\n", rs);
 	if (hd44780_rs_state != rs) {
 		hd44780_rs_state = rs;
 		digitalWrite(HD44780_GPIO_RS, rs);
+		/* address setup tAS = 40ns */
+		for (k=0; k<40; k++)
+			asm volatile ( "nop;" );
 	}
 }
+
+void
+hd44780_noritake_brightness(unsigned int c) {
+	hd44780_write_byte(HD44780_FUNC(0, 1, 0), HD44780_CMD);
+	hd44780_write_byte(c & 0x03, HD44780_DATA);
+}
+
 
 /* initialize the LCD to 4-bit mode and turn it on */
 static void
@@ -75,13 +127,16 @@ hd44780_init_lcd()
 
 	hd44780_write_nibble(0x20,   50); /* }    put it in 4-bit mode.           */
 
-	/* now display is in 8-bit mode for sure */
+#if 0
+	/* now display is in 4-bit mode for sure */
 	/* 0:4-bit, 1:2 lines, 0:5x8 font */
 	hd44780_write_byte(HD44780_FUNC(0, 1, 0), HD44780_CMD);
 
 	/* one byte directly following the FUNCTION command controls
 	 * the brightness (on a Noritake VFD Display). Set to low intensity. */
 	hd44780_write_byte(3, HD44780_DATA);
+#endif
+	hd44780_noritake_brightness(3);
 
 	/* on, cursor off, cursor blink off */
 	hd44780_write_byte(HD44780_ONOFF(1, 0, 0), HD44780_CMD);
@@ -105,19 +160,28 @@ hd44780_init() {
 	return 0;
 }
 
+static int
+hd44780_is_slow_cmd(unsigned char v) {
+	if (v == HD44780_CLEAR)
+		return 1;
+	if ((v & 0xfe) == HD44780_HOME)
+		return 1;
+	return 0;
+}
+
 /* write a 8-bit command or 8-bit data to the display */
 void
 hd44780_write_byte(unsigned char v, enum HD44780_ISCMD iscmd)
 {
 	useconds_t usec;
 
-	if ((iscmd == HD44780_CMD) & (
-		(v & 0xfe) == HD44780_HOME || 
-		 v         == HD44780_CLEAR
-	))
-		usec=4500;
-	else
-		usec=50;
+	if(iscmd == HD44780_CMD) {
+		if (hd44780_is_slow_cmd(v))
+			usec = 4500; /* clear and home is particularly slow */
+		else
+			usec = 50;
+	} else
+		usec = 1; /* data writes are fast */
 
 	hd44780_set_rs(iscmd);
 	hd44780_write_nibble( v       & 0xf0, 1);     /* MSB */
@@ -126,22 +190,9 @@ hd44780_write_byte(unsigned char v, enum HD44780_ISCMD iscmd)
 
 /* write a buffer of data */
 extern void
-hd44780_write_buf(const char *v, size_t len) {
+hd44780_write_buf(const unsigned char *v, size_t len) {
 	size_t i;
 
 	for (i=0; i<len ; i++)
 		hd44780_write_byte(v[i], HD44780_DATA);
 }
-
-void
-hd44780_clear_mem()
-{
-	char buf[64];
-	memset(buf,'\0', sizeof(buf));
-	hd44780_write_byte(HD44780_DDADDR(0x00), HD44780_CMD);
-	hd44780_write_buf(buf, 16);
-	hd44780_write_byte(HD44780_DDADDR(0x40), HD44780_CMD);
-	hd44780_write_buf(buf, 16);
-	hd44780_write_byte(HD44780_CGADDR(0x00), HD44780_CMD);
-	hd44780_write_buf(buf, 64);
-};

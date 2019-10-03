@@ -1,0 +1,9 @@
+[Unit]
+Description=a daemon showing text on a Noritake VFD (compatible to HD44780 LCD)
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/hd44780_gpio_daemon
+
+[Install]
+WantedBy=multi-user.target

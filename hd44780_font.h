@@ -1,7 +1,10 @@
 #ifndef HD44780_FONT_H
 #define HD44780_FONT_H
 
-#define HD44780_FONT_WINDMILL '\x07'
+#define HD44780_FONT_HEART '\x04'    /* 3> */
+#define HD44780_FONT_SMILE '\x05'    /* :-) */
+#define HD44780_FONT_ELLIPSIS '\x06' /* ... */
+#define HD44780_FONT_WINDMILL '\x07' /* rotating bar */
 #define HD44780_FONT_NBYTES    8     /* 8 bytes per char */
 #define HD44780_FONT_WINDMILL_NCHARS 9
 
@@ -17,13 +20,13 @@
  */
 
 extern void
-hd44780_font_setchar(char c, const char *font);
+hd44780_font_init();
 
 extern void
-hd44780_font_set_windmill_phase(unsigned i);
+hd44780_font_setchar(char c, const unsigned char *font);
 
+struct event_base;
 extern void
-hd44780_font_windmill_advance(unsigned *i);
-
+hd44780_font_windmill(struct event_base *evtbase, int onoff);
 
 #endif

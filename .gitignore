@@ -2,4 +2,4 @@
 *.d
 *~
 hd44780_gpio_daemon
-
+.*

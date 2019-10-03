@@ -1,57 +1,74 @@
+/*
+    This file is part of hd44780_gpio_daemon.
+
+    hd44780_gpio_daemon is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    hd44780_gpio_daemon is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with hd44780_gpio_daemon.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+
+#include "tcp_server.h"
 #include "hd44780.h"
 #include "hd44780_font.h"
+#include "hd44780_display.h"
 #include "statuspages.h"
+
+#include <event2/event.h>
 
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <time.h>
 
+#define DEFAULT_TCP_PORT 54321
 
-static const char cgram[] = {
-	0x00,  /* . . . . . */
-	0x1b,  /* * * . * * */
-	0x1b,  /* * * . * * */
-	0x00,  /* . . . . . */
-	0x11,  /* * . . . * */
-	0x0e,  /* . * * * . */
-	0x00,  /* . . . . . */
-	0x00,
-};
+static struct event_base *evtbase;
+static uint16_t port = DEFAULT_TCP_PORT;
+
+void
+usage(char *argv0) {
+	fprintf(stderr, "Usage: %s [options]\n", argv0);
+	fprintf(stderr, "\t-h        Show this usage.\n");
+	fprintf(stderr, "\t-p PORT   listen on TCP port PORT, default %u\n",
+		DEFAULT_TCP_PORT);
+}
 
 int
 main(int argc, char **argv)
 {
-	useconds_t usec;
-	useconds_t usec_per_statuspage;
-	struct statuspage **p;
 	int i;
 
-	(void) argc;
-	(void) argv;
-	hd44780_init();
-	hd44780_clear_mem();
-
-	hd44780_font_setchar(0, cgram);
-
-	p = statuspages;
-	usec_per_statuspage = 0;
-
-	while (1) {
-
-		if (usec_per_statuspage <= 0) {
-			printf("New statuspage.\n");
-			p++;
-			if (!*p)
-				p = statuspages;
-			usec_per_statuspage = 10000000;
-			(*p)->fct_enter();
+	while ((i=getopt(argc, argv, "hp:")) != -1) {
+		switch(i) {
+		case 'h':
+			usage(argv[0]);
+			exit(1);
+		case 'p':
+			port = strtoul(optarg, NULL, 0);
+			break;
 		}
-		(*p)->fct_update(&usec);
-		usleep(usec);
-		usec_per_statuspage -= usec;
 	}
 
+	fprintf(stderr, "Listening in TCP port %u.\n", port);
+
+	evtbase = event_base_new();
+	tcp_server_init(evtbase, 1234);
+
+	hd44780_init();
+	hd44780_font_init();
+	hd44780_display_sync_ddaddr();
+
+	statuspages_on(evtbase);
+	event_base_dispatch(evtbase);
 	return 0;
 }
 
