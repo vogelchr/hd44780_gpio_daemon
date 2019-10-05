@@ -6,7 +6,7 @@
 #define HD44780_FONT_ELLIPSIS '\x06' /* ... */
 #define HD44780_FONT_WINDMILL '\x07' /* rotating bar */
 #define HD44780_FONT_NBYTES    8     /* 8 bytes per char */
-#define HD44780_FONT_WINDMILL_NCHARS 9
+#define HD44780_FONT_WINDMILL_NCHARS 10
 
 /*
  *  [0] = 0bxxx54321      54321
